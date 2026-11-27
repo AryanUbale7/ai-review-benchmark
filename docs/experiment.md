@@ -528,7 +528,7 @@ These identifiers are experiment-level labels and do not replace the original pr
 7. All three providers used the same review repository, so provider-level repository isolation was not established; possible cross-review context or indexing effects remain unverified.
 8. The current results should not be interpreted as a universal ranking of AI reviewers.
 9. Similar comments from different reviewers may describe the same underlying defect and should not automatically be counted as separate defects.
-
+10. AWS deployment was not performed because AWS account access and deployment credentials were unavailable. The successful GitHub Actions CI run only verifies packaging and local Lambda handler smoke testing; it does not demonstrate a live AWS deployment.
 ---
 
 # 8. Remaining Work
@@ -543,7 +543,8 @@ These identifiers are experiment-level labels and do not replace the original pr
 - [ ] Verify retry and webhook handling.
 - [ ] Document provider settings and isolation limitations.
 - [ ] Expand the reviewer comparison if additional providers are available.
-- [ ] Complete the CI and AWS deployment exercise.
+- [x] Execute the GitHub Actions CI workflow, including application packaging and Lambda handler smoke testing.
+- [ ] Complete the AWS deployment, live verification and stack deletion exercise.
 - [ ] Prepare the final reproducible report.
 - [ ] Record the narrated walkthrough.
 
@@ -556,3 +557,7 @@ The initial reviewer comparison has been executed across all eight benchmark cas
 The experiment has captured reviewer findings, no-finding reviews and differences in reported issues. The current results are preliminary.
 
 The Case 07 Proofline count discrepancy has been resolved by inspecting the original review, which showed zero findings. The report remains preliminary until the outstanding manual assessments, attempt-level metadata, provider-isolation documentation and deployment evidence have been addressed.
+
+The GitHub Actions CI workflow completed successfully on commit `807d48c`. The workflow packaged the application and successfully executed the Lambda handler smoke test, producing a local smoke-test result with one delivered report and zero pending deliveries.
+
+The live AWS deployment, verification and stack deletion steps remain incomplete because AWS account access and the required deployment configuration were unavailable. No live AWS deployment is claimed.
