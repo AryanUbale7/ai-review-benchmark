@@ -1,5 +1,27 @@
 # AI Review Benchmark — Experiment Report
 
+## Contents
+
+- [1. Experiment Overview](#1-experiment-overview)
+- [2. Experimental Methodology](#2-experimental-methodology)
+- [3. Finding Evaluation Method](#3-finding-evaluation-method)
+- [4. Case-by-Case Results](#4-case-by-case-results)
+- [5. Cross-Case Comparison](#5-cross-case-comparison)
+- [6. Attempt-Level Metadata](#6-attempt-level-metadata)
+- [7. Limitations](#7-limitations)
+- [8. Remaining Work](#8-remaining-work)
+- [9. Final Status](#9-final-status)
+
+## Executive Summary
+
+This report records an eight-case comparison of Proofline, CodeRabbit and Qodo on the AI Review Benchmarks application. The reviewers examined the same case changes in a shared private GitHub review repository. The recorded context was code-only.
+
+The clearest shared findings appear in Cases 01, 02, 03 and 06. Cases 04, 05, 07 and 08 had no actionable findings recorded from any of the three reviewers. Qodo reported two additional Case 01 concerns that still need independent verification. CodeRabbit's two Case 06 comments also need to be checked to determine whether they represent separate defects or overlapping descriptions.
+
+The results are useful as a record of these specific review attempts, but they are not yet a complete or controlled provider ranking. Attempt-level metadata, provider-isolation evidence, manual validation and the separate CI/AWS deployment exercise remain outstanding.
+
+---
+
 ## 1. Experiment Overview
 
 ### 1.1 Objective
@@ -63,15 +85,11 @@ A repeated delivery of the same GitHub webhook should not be counted as a new in
 
 ### 2.2 Input Isolation
 
-Each benchmark case is reviewed through its corresponding application-only branch.
+Each benchmark case is reviewed through its corresponding application-only branch. The benchmark implementation, experiment notes and grading information are kept outside the reviewer-facing application changes.
 
-The benchmark implementation, experiment notes and grading information are kept outside the reviewer-facing application changes.
+For the recorded run, Proofline, CodeRabbit and Qodo reviewed the same eight pull requests in the shared private repository `AryanUbale7/ai-review-run-01`. This keeps the code changes consistent across reviewers, but it does **not** provide separate provider-specific review repositories. As a result, repository indexing, prior review comments or shared learning could have affected later reviews.
 
-The reviewers are evaluated using the same case changes under the code-only context condition.
-
-Potential shared learning, repository indexing and access to earlier review discussions should be documented where those settings are visible.
-
-**Isolation verification — pending:** Record provider indexing, shared-learning settings and access limitations.
+Provider indexing, shared-learning settings and access to earlier review discussions have not yet been independently verified. This is an isolation limitation and must remain visible in the final interpretation.
 
 ### 2.3 Deployment Context
 
@@ -159,8 +177,8 @@ Qodo reported three findings:
 **Assessment notes**
 
 1. **Timestamp tie pagination:** The cursor filters only by `scheduled_at`, while results are sorted by `scheduled_at DESC, id DESC`. Entries sharing the boundary timestamp can be skipped.
-2. **Old cursor compatibility:** The cursor meaning changes from an ID to a `scheduled_at` timestamp, but the CLI still accepts the old cursor format. Verify whether old cursor values are supported or explicitly versioned.
-3. **Index support:** The query filters and sorts using `scheduled_at`, but the reported migration does not appear to add a supporting index. Verify the migration and query plan before grading this as a confirmed performance issue.
+2. **Old cursor compatibility:** The cursor meaning changes from a row ID (`id < ?`) to a `scheduled_at` timestamp (`scheduled_at < ?`), while the CLI still accepts an integer cursor without versioning. A cursor issued by the old implementation may therefore be compared against Unix-second timestamps and return an empty or incorrect page. This is a plausible compatibility issue; verify the intended backward-compatibility contract before final grading.
+3. **Index support:** The query filters and sorts using `scheduled_at`, but Qodo reports that the migration does not add a supporting index for the new sort. Verify the actual migration and SQLite query plan before grading this as a confirmed performance issue.
 
 ### Commit References
 
@@ -177,95 +195,35 @@ This result represents one case and should not be generalized to overall reviewe
 
 ---
 
-## Case 02 — Stream the Report Export
+### Case 02 — Stream report export
 
-### Review Configuration
+| Reviewer | Findings | Assessment |
+|---|---:|---|
+| Proofline | 1 | Valid |
+| CodeRabbit | 1 | Valid |
+| Qodo | 1 | Valid |
 
-| Attribute | Value |
-|---|---|
-| Case | 02 |
-| Repository | `AryanUbale7/ai-review-run-01` |
-| Pull Request | #2 |
-| Base branch | `main` |
-| Head branch | `pilot/02` |
-| Context | Code-only |
+**Shared finding:** All three reviewers identified the CSV export issue: report values are joined manually using commas without proper CSV quoting or escaping.
 
-### Recorded Review Attempts
+**Qodo finding:** `write_export` uses `",".join(map(str, row))`, which can corrupt exported CSV data when a report value contains commas, double quotes, or newline characters.
 
-| Provider | Trigger | Outcome | Findings | Valid | False positives |
-|---|---|---|---:|---:|---:|
-| Proofline | GitHub PR | Completed | 1 | 1 | 0 |
-| CodeRabbit | GitHub PR | Completed | 1 | 1 | 0 |
-| Qodo | Manual `/agentic_review` | Completed | 1 | 1 | 0 |
-
-### Finding Assessment
-
-The export implementation joins database values using commas without proper CSV quoting.
-
-Report names containing commas, double quotes or newlines can therefore break the exported CSV structure. Using Python's `csv.writer` while preserving the streaming behaviour is an appropriate solution.
-
-### Qodo Finding
-
-- **Finding:** Exported reports break when a name has a comma or quote.
-- **Severity:** High.
-- **Assessment:** Valid.
-- **Evidence:** Qodo identified the issue in `reports.py`, in the `write_export` implementation.
-- **Reason:** The implementation manually joins values with commas and does not escape commas, double quotes or newlines. This can produce malformed CSV output.
-
-### Proofline and CodeRabbit
-
-Both reviewers are recorded as having identified the CSV formatting issue.
-
-- Proofline: one finding, assessed as valid.
-- CodeRabbit: one finding, assessed as valid.
-
-### Case 02 Conclusion
-
-All three recorded reviewers identified the CSV formatting issue. Qodo's finding is supported by the implementation shown in the review comment.
+**Evaluation status:** One valid finding recorded for each reviewer. Using Python's `csv.writer` would provide proper CSV escaping while preserving the streaming approach.
 
 ---
 
-## Case 03 — Batch Queued Deliveries
+### Case 03 — Batch queued deliveries
 
-### Review Configuration
+| Reviewer | Findings | Assessment |
+|---|---:|---|
+| Proofline | 1 | Valid |
+| CodeRabbit | 1 | Valid |
+| Qodo | 1 | Valid |
 
-| Attribute | Value |
-|---|---|
-| Case | 03 |
-| Repository | `AryanUbale7/ai-review-run-01` |
-| Pull Request | #3 |
-| Base branch | `main` |
-| Head branch | `pilot/03` |
-| Context | Code-only |
+**Shared finding:** The batching loop processes only complete batches of 20 jobs. Any remaining jobs in a partial batch are skipped.
 
-### Recorded Review Attempts
+**Qodo finding:** `deliver_due` iterates only over complete groups of 20. Queues containing fewer than 20 jobs are never processed, and the remaining jobs in larger queues can remain pending until enough new jobs arrive.
 
-| Provider | Trigger | Outcome | Findings | Valid | False positives |
-|---|---|---|---:|---:|---:|
-| Proofline | GitHub PR | Completed | 1 | 1 | 0 |
-| CodeRabbit | GitHub PR | Completed | 1 | 1 | 0 |
-| Qodo | Manual `/agentic_review` | Completed | 1 | 1 | 0 |
-
-### Finding Assessment
-
-The batching loop processes only complete batches of 20.
-
-When fewer than 20 jobs remain, those jobs may be skipped. This can leave due jobs pending and cause the worker to report fewer deliveries than expected.
-
-The loop should process the final partial batch as well.
-
-### Qodo Finding
-
-- **Finding:** Low-volume queues never deliver reports.
-- **Severity:** High.
-- **Assessment:** Valid.
-- **Evidence:** Qodo identified the loop in `reports.py` around lines 78–79.
-- **Reason:** `deliver_due` iterates only over complete groups of 20. A queue with fewer than 20 due jobs is not processed, and the remaining jobs can stay pending.
-
-### Case 03 Conclusion
-
-Proofline, CodeRabbit and Qodo are all recorded as identifying the final partial-batch processing issue. The finding is a functional correctness issue because due jobs can remain pending.
-
+**Evaluation status:** One valid finding recorded for each reviewer. The batching logic should process the final partial batch as well.
 ---
 
 ## Case 04 — Retire the Legacy Delivery Column
@@ -358,18 +316,6 @@ Further correctness and performance validation should be performed separately be
 ### Case 05 Conclusion
 
 All three reviewers completed without reporting actionable findings. Manual performance validation remains separate.
-
-### Case 05 — Increase export batch size
-
-- Reviewer: Qodo
-- Pull Request: #5
-- Bugs reported: 0
-- Rule violations: 0
-- Requirement gaps: 0
-- Valid findings: 0
-- False positives: 0
-- Result: Qodo reported no material issues.
-- Notes: No findings were reported for this case.
 ---
 
 ## Case 06 — Use the New Delivery Queue
@@ -449,17 +395,17 @@ All three reviewers identified risks associated with the queue migration. The fi
 
 | Provider | Trigger | Outcome | Findings | Valid | False positives |
 |---|---|---|---:|---:|---:|
-| Proofline | GitHub PR | Completed (Deep Review) | 0 in case details; summary conflict | Pending verification | — |
+| Proofline | GitHub PR | Completed (Deep Review) | 0 | 0 | 0 |
 | CodeRabbit | GitHub PR | Completed | 0 | 0 | 0 |
 | Qodo | Manual `/agentic_review` | Completed | 0 | 0 | 0 |
 
 ### Review Assessment
 
-Neither CodeRabbit nor Qodo reported an actionable finding.
+All three reviewers completed their reviews without reporting any actionable findings.
 
-Proofline triggered a Deep Review because the change involved a database migration. The case-specific notes record zero findings, but the earlier cross-case summary records one Proofline finding for Case 07.
+Proofline triggered a Deep Review because the change involved a database migration. The detailed Proofline review was inspected and confirmed to contain zero findings.
 
-**Data consistency issue:** Verify the original Proofline review before finalizing the Case 07 count. Do not use this case in comparative calculations until the discrepancy is resolved.
+No false positives or actionable findings were recorded for this case.
 
 ### CI Status
 
@@ -467,7 +413,9 @@ Both recorded GitHub checks passed successfully.
 
 ### Case 07 Conclusion
 
-CodeRabbit and Qodo completed without actionable findings. Proofline's final finding count requires verification against the original review.
+All three reviewers completed the Case 07 review with zero reported findings. The original Proofline review was verified, resolving the previously recorded discrepancy.
+
+This case is included in the cross-case comparison with zero findings for all three providers.
 
 ---
 
@@ -512,7 +460,7 @@ All three reviewers completed without reporting actionable issues. This is a no-
 
 # 5. Cross-Case Comparison
 
-The following table consolidates the currently recorded outcomes. Case 07 contains an unresolved Proofline count discrepancy and is marked accordingly.
+The following table consolidates the recorded outcomes across all eight benchmark cases. The Case 07 Proofline discrepancy has been resolved by inspecting the original review.
 
 | Case | Proofline | CodeRabbit | Qodo |
 |---|---|---|---|
@@ -522,18 +470,18 @@ The following table consolidates the currently recorded outcomes. Case 07 contai
 | 04 | No actionable findings | No actionable findings | No actionable findings |
 | 05 | No actionable findings | No actionable findings | No actionable findings |
 | 06 | 1 finding | 2 comments | 2 valid findings |
-| 07 | **Conflicting record — verify** | No actionable findings | No actionable findings |
+| 07 | No actionable findings (0) | No actionable findings (0) | No actionable findings (0) |
 | 08 | No actionable findings | No actionable findings | No actionable findings |
 
 ## 5.1 Preliminary Interpretation
 
 - All three reviewers are recorded as identifying issues in Cases 01, 02, 03 and 06.
-- Case 07 shows a difference in recorded outcomes, but the Proofline count must be reconciled before drawing a conclusion.
-- All three reviewers completed without actionable findings in Cases 04, 05 and 08.
-- Qodo reported additional findings in Case 01 that require independent verification.
+- All three reviewers completed Cases 04, 05, 07 and 08 without reporting actionable findings.
+- Qodo reported two additional Case 01 concerns: old-cursor compatibility and index support. Both require independent verification before they are counted as confirmed valid findings.
 - Case 06 demonstrates the importance of checking both new queue routing and existing queued records.
+- Similar comments may describe the same underlying defect; comments should not be treated as separate defects without checking their substance.
 
-These observations are preliminary. Finding-level validity, duplicate handling and missed-defect assessments must be completed before calculating comparative performance rates.
+These observations are preliminary. Finding-level validity, duplicate handling, provider isolation and missed-defect assessments must be completed before calculating comparative performance rates.
 
 ---
 
@@ -577,7 +525,7 @@ These identifiers are experiment-level labels and do not replace the original pr
 4. Original review comments and attempt-level metadata are not yet fully recorded.
 5. Some findings still require independent manual validation.
 6. Provider model and plan information may not be visible.
-7. Case 07 contains a conflicting Proofline finding count that must be resolved.
+7. All three providers used the same review repository, so provider-level repository isolation was not established; possible cross-review context or indexing effects remain unverified.
 8. The current results should not be interpreted as a universal ranking of AI reviewers.
 9. Similar comments from different reviewers may describe the same underlying defect and should not automatically be counted as separate defects.
 
@@ -585,8 +533,7 @@ These identifiers are experiment-level labels and do not replace the original pr
 
 # 8. Remaining Work
 
-- [ ] Inspect and grade the original Proofline finding for Case 07.
-- [ ] Verify the original findings for Cases 01–06.
+- [ ] Complete independent manual validation of the recorded findings for Cases 01–06.
 - [ ] Independently validate the additional Qodo findings for Case 01.
 - [ ] Confirm whether CodeRabbit's two Case 06 comments represent separate defects or overlapping descriptions.
 - [ ] Perform manual validation for Case 08.
@@ -608,4 +555,4 @@ The initial reviewer comparison has been executed across all eight benchmark cas
 
 The experiment has captured reviewer findings, no-finding reviews and differences in reported issues. The current results are preliminary.
 
-The report should be treated as complete only after the outstanding manual assessments, Case 07 discrepancy, attempt-level metadata and deployment evidence have been addressed.
+The Case 07 Proofline count discrepancy has been resolved by inspecting the original review, which showed zero findings. The report remains preliminary until the outstanding manual assessments, attempt-level metadata, provider-isolation documentation and deployment evidence have been addressed.
